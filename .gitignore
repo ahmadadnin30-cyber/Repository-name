@@ -1,0 +1,30 @@
+# Secrets
+.env
+
+# Virtual environment
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Data files
+data/*.csv
+data/*.json
+
+# Model cache
+.cache/
+models/
+
+# Streamlit
+.streamlit/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
