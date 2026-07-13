@@ -28,6 +28,7 @@ Why this is the *efficient* design:
 | Linux    | `/proc/net/wireless` (file read) | ~microseconds, no subprocess |
 | Windows  | `wlanapi.dll` via ctypes | native call, no subprocess |
 | macOS    | `airport -I` | one short subprocess (capped 4 Hz) |
+| Android  | Termux:API `termux-wifi-connectioninfo` | subprocess (capped 1 Hz — Android refreshes RSSI every ~1-3 s) |
 
 The whole thing is numpy + stdlib. CPU usage is negligible (<1% of one core).
 
@@ -70,6 +71,49 @@ python -m wifi_sensing replay session.csv         # offline detection on a recor
 ```
 
 Global flags: `--rate HZ` (default 10), `--interface wlan0`, `--cal-file PATH`.
+
+## Android phone (Termux)
+
+Turn an old phone into a WiFi motion sensor:
+
+1. Install **Termux** and the **Termux:API** add-on app — both from
+   [F-Droid](https://f-droid.org) (the Play Store builds are outdated and
+   the two apps' signatures must match, so install both from F-Droid).
+2. In Termux:
+
+   ```bash
+   pkg update
+   pkg install termux-api python git
+   pip install numpy
+   git clone https://github.com/ahmadadnin30-cyber/Repository-name.git
+   cd Repository-name
+   ```
+
+3. Sanity-check the API bridge (should print JSON with an `rssi` field;
+   Android will ask for the Location permission the first time — WiFi info
+   requires it):
+
+   ```bash
+   termux-wifi-connectioninfo
+   ```
+
+4. Calibrate and run — the Termux backend is auto-detected:
+
+   ```bash
+   python -m wifi_sensing calibrate --seconds 60
+   python -m wifi_sensing run
+   ```
+
+Phone-specific notes:
+
+- Android only refreshes RSSI every ~1-3 s, so the backend samples at 1 Hz
+  and the analysis window stretches automatically. Expect detection latency
+  of ~5-15 s on a phone versus ~2 s on a laptop; calibrate for 60 s rather
+  than 30 s.
+- Keep the phone plugged in and run `termux-wake-lock` first, otherwise
+  Android dozes the process and sampling stalls.
+- Placement matters even more than on a laptop: put the phone so the
+  watched area lies between it and the router.
 
 ## Tuning
 

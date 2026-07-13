@@ -32,6 +32,12 @@ def _make_backend(args, quiet_sim: bool = False) -> backends.Backend:
     return backends.autodetect(getattr(args, "interface", None))
 
 
+def _extractor(rate_hz: float) -> FeatureExtractor:
+    # Slow backends (e.g. Termux at 1 Hz) need a longer window so the
+    # spectral features still get >=16 samples to work with.
+    return FeatureExtractor(rate_hz=rate_hz, window_s=max(4.0, 16.0 / rate_hz))
+
+
 def _sample_loop(backend: backends.Backend, rate_hz: float):
     """Yield (timestamp, rssi) at up to rate_hz, sleeping only as needed."""
     period = 1.0 / min(rate_hz, backend.max_rate_hz)
@@ -61,7 +67,7 @@ def cmd_calibrate(args) -> int:
     print(f"Backend: {backend.name} @ {rate:.1f} Hz")
     print(f"Calibrating for {args.seconds:.0f}s — keep the room EMPTY and still...")
 
-    extractor = FeatureExtractor(rate_hz=rate)
+    extractor = _extractor(rate)
     residual_sigmas = []
     samples = 0
     for _, rssi in _sample_loop(backend, rate):
@@ -108,7 +114,7 @@ def cmd_run(args) -> int:
     rate = min(args.rate, backend.max_rate_hz)
     cal = _load_or_default_cal(args, backend, rate)
 
-    extractor = FeatureExtractor(rate_hz=rate)
+    extractor = _extractor(rate)
     detector = MotionDetector(
         cal, threshold=args.threshold,
         presence_hold_s=args.presence_hold,
@@ -183,7 +189,7 @@ def cmd_replay(args) -> int:
     backend = _make_backend(args)
     rate = args.rate
     cal = _load_or_default_cal(args, backend, rate)
-    extractor = FeatureExtractor(rate_hz=rate)
+    extractor = _extractor(rate)
     detector = MotionDetector(cal, threshold=args.threshold)
 
     events = []

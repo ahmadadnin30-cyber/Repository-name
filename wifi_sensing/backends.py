@@ -18,10 +18,12 @@ Backends, most efficient first per platform:
 from __future__ import annotations
 
 import csv
+import json
 import math
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -278,6 +280,55 @@ class Netsh(Backend):
 
 
 # --------------------------------------------------------------------------
+# Android (Termux)
+# --------------------------------------------------------------------------
+
+class TermuxApi(Backend):
+    """Android phone via Termux + the Termux:API add-on app.
+
+    ``termux-wifi-connectioninfo`` returns the connected network's RSSI as
+    JSON. Android's framework only refreshes RSSI every ~1-3 s, so polling
+    faster than 1 Hz just returns repeated values — the rate is capped
+    accordingly and detection latency on a phone is a few seconds higher
+    than on a laptop.
+    """
+
+    name = "termux"
+    max_rate_hz = 1.0
+    COMMAND = "termux-wifi-connectioninfo"
+
+    def __init__(self):
+        if shutil.which(self.COMMAND) is None:
+            raise RuntimeError(
+                "termux-wifi-connectioninfo not found — run `pkg install termux-api` "
+                "and install the Termux:API app from F-Droid")
+        if self.read() is None:
+            raise RuntimeError(
+                "Termux returned no RSSI — check WiFi is connected and the "
+                "Termux:API app is installed and granted permissions")
+
+    @staticmethod
+    def parse(output: str) -> Optional[float]:
+        try:
+            info = json.loads(output)
+        except (ValueError, TypeError):
+            return None
+        rssi = info.get("rssi") if isinstance(info, dict) else None
+        if not isinstance(rssi, (int, float)) or rssi <= -127:  # -127 = invalid
+            return None
+        return float(rssi)
+
+    def read(self) -> Optional[float]:
+        try:
+            out = subprocess.run(
+                [self.COMMAND], capture_output=True, text=True, timeout=10
+            ).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return self.parse(out)
+
+
+# --------------------------------------------------------------------------
 # macOS
 # --------------------------------------------------------------------------
 
@@ -384,7 +435,12 @@ def autodetect(interface: Optional[str] = None) -> Backend:
     """Return the most efficient working backend for this machine."""
     candidates = []
     if sys.platform.startswith("linux"):
-        candidates = [lambda: ProcNetWireless(interface), lambda: IwLink(interface)]
+        candidates = []
+        # Termux on Android identifies as linux but has no /proc/net/wireless
+        # access; prefer its API bridge when present.
+        if os.environ.get("TERMUX_VERSION") or shutil.which(TermuxApi.COMMAND):
+            candidates.append(TermuxApi)
+        candidates += [lambda: ProcNetWireless(interface), lambda: IwLink(interface)]
     elif sys.platform == "win32":
         candidates = [WlanApi, Netsh]
     elif sys.platform == "darwin":
