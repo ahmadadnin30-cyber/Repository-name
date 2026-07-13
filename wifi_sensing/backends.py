@@ -434,24 +434,27 @@ class Simulate(Backend):
 def autodetect(interface: Optional[str] = None) -> Backend:
     """Return the most efficient working backend for this machine."""
     candidates = []
-    if sys.platform.startswith("linux"):
-        candidates = []
-        # Termux on Android identifies as linux but has no /proc/net/wireless
-        # access; prefer its API bridge when present.
-        if os.environ.get("TERMUX_VERSION") or shutil.which(TermuxApi.COMMAND):
-            candidates.append(TermuxApi)
+    # Termux: Python <=3.12 reports sys.platform "linux", 3.13+ reports
+    # "android" (PEP 738). Its API bridge beats the generic Linux sources,
+    # which Android sandboxes away.
+    if (sys.platform == "android" or os.environ.get("TERMUX_VERSION")
+            or shutil.which(TermuxApi.COMMAND)):
+        candidates.append(TermuxApi)
+    if sys.platform.startswith(("linux", "android")):
         candidates += [lambda: ProcNetWireless(interface), lambda: IwLink(interface)]
     elif sys.platform == "win32":
-        candidates = [WlanApi, Netsh]
+        candidates += [WlanApi, Netsh]
     elif sys.platform == "darwin":
-        candidates = [Airport]
+        candidates += [Airport]
 
+    if not candidates:
+        raise RuntimeError(f"unsupported platform: {sys.platform}")
     errors = []
     for factory in candidates:
         try:
             return factory()
         except Exception as e:  # try the next candidate
-            errors.append(str(e))
+            errors.append(f"{getattr(factory, 'name', 'backend')}: {e}")
     raise RuntimeError(
         "No usable RSSI source found. Are you connected to WiFi?\n  - "
         + "\n  - ".join(errors)
