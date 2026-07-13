@@ -106,6 +106,33 @@ class TestTermuxParse(unittest.TestCase):
         self.assertIsNone(TermuxApi.parse(""))
 
 
+class TestAutodetectAndroid(unittest.TestCase):
+    """Python 3.13+ on Android reports sys.platform == 'android' (PEP 738);
+    autodetect must still find the Termux backend there."""
+
+    def test_android_platform_tries_termux(self):
+        from unittest import mock
+        import wifi_sensing.backends as B
+        with mock.patch.object(B.sys, "platform", "android"), \
+             mock.patch.object(B.shutil, "which", return_value=None):
+            with self.assertRaises(RuntimeError) as cm:
+                B.autodetect()
+        self.assertIn("termux", str(cm.exception).lower())
+
+    def test_termux_backend_selected_when_bridge_works(self):
+        from unittest import mock
+        import wifi_sensing.backends as B
+        fake = mock.Mock()
+        fake.stdout = '{"rssi": -60, "supplicant_state": "COMPLETED"}'
+        with mock.patch.object(B.sys, "platform", "android"), \
+             mock.patch.object(B.shutil, "which",
+                               return_value="/usr/bin/termux-wifi-connectioninfo"), \
+             mock.patch.object(B.subprocess, "run", return_value=fake):
+            backend = B.autodetect()
+            self.assertEqual(backend.name, "termux")
+            self.assertEqual(backend.read(), -60.0)
+
+
 class TestLowRatePipeline(unittest.TestCase):
     def test_detection_works_at_termux_rate(self):
         """At 1 Hz (Android RSSI refresh) motion must still be caught."""

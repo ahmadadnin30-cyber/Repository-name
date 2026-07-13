@@ -83,11 +83,18 @@ Turn an old phone into a WiFi motion sensor:
 
    ```bash
    pkg update
-   pkg install termux-api python git
-   pip install numpy
+   pkg install termux-api python git python-numpy
    git clone https://github.com/ahmadadnin30-cyber/Repository-name.git
    cd Repository-name
    ```
+
+   Use the `python-numpy` package, **not** `pip install numpy` — Termux has
+   no prebuilt numpy wheels, so pip tries (and typically fails) to compile
+   it from source. Also, if `pkg update` upgrades Python itself, pip may
+   break with a `bad interpreter: python3.x` error; `pkg install
+   python-numpy` sidesteps that too. Mirror errors like *"File has
+   unexpected size / mirror sync in progress"* are transient — run
+   `termux-change-repo`, pick a different mirror, and retry.
 
 3. Sanity-check the API bridge (should print JSON with an `rssi` field;
    Android will ask for the Location permission the first time — WiFi info
